@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Emergência - Polícia</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1 style="color: #999; font-size: 24px; margin: 0 0 20px 0;">BOTÃO DE EMERGÊNCIA</h1>
+        
+        <button 
+            id="btnEmergencia" 
+            aria-label="Acionador de emergência - clique duas vezes para confirmar"
+            title="Clique duas vezes para confirmar o acionamento de emergência"
+        >
+            🚨<br>EMERGÊNCIA
+        </button>
+
+        <p id="status" role="status" aria-live="polite"></p>
+        
+        <div style="color: #666; font-size: 12px; margin-top: 40px; max-width: 300px;">
+            <p>⚠️ Pressione o botão para acionar emergência</p>
+            <p>Uma confirmação será solicitada na segunda ação</p>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

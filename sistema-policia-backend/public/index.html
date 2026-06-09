@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚔 Painel de Emergência - Polícia</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">🚔</span>
+                <h1>Painel de Emergência</h1>
+            </div>
+            <div class="status-info">
+                <div class="status-item">
+                    <span class="status-label">Conectados:</span>
+                    <span class="status-value" id="usuariosConectados">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Total de Alertas:</span>
+                    <span class="status-value" id="totalAlertas">0</span>
+                </div>
+                <div class="status-item" id="statusConexao">
+                    <span class="status-dot online"></span>
+                    <span class="status-label">Conectado</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Filtros -->
+        <div class="filtros">
+            <button class="filtro-btn active" data-filtro="ATIVO">
+                🔴 Ativos
+            </button>
+            <button class="filtro-btn" data-filtro="EM_ATENDIMENTO">
+                🟡 Em Atendimento
+            </button>
+            <button class="filtro-btn" data-filtro="RESOLVIDO">
+                🟢 Resolvidos
+            </button>
+            <button class="filtro-btn" data-filtro="TODOS">
+                📋 Todos
+            </button>
+        </div>
+
+        <!-- Lista de Alertas -->
+        <div class="alertas-container">
+            <div id="alertasList" class="alertas-list">
+                <div class="empty-state">
+                    <p>📭 Nenhum alerta no momento</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal para detalhes do alerta -->
+    <div id="modalAlerta" class="modal hidden">
+        <div class="modal-content">
+            <button class="modal-close">&times;</button>
+            <div id="modalBody" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Áudio para alerta -->
+    <audio id="audioAlerta" preload="auto">
+        <source src="data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQIAAAAAAA==" type="audio/wav">
+    </audio>
+
+    <script src="client.js"></script>
+</body>
+</html>
