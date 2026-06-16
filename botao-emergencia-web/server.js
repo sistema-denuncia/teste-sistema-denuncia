@@ -19,6 +19,7 @@ app.use(express.json());               // lê body JSON
 app.use(express.urlencoded({ extended: true })); // lê body de formulários
 app.use(express.static('public'));     // serve arquivos estáticos
 
+// ── CORS (se necessário) ─────────────────────────────────────
 // ── Rotas ─────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -4,7 +4,7 @@ const socket = io();
 // Variáveis globais
 let alertas = [];
 let filtroAtual = 'ATIVO';
-
+//qwe
 // ============================================
 // EVENTOS DO SOCKET.IO
 // ============================================

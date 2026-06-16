@@ -81,8 +81,11 @@ async function notificarPolicia(alerta) {
     console.error('⚠️  Falha ao notificar backend da polícia:', err.message);
   }
 }
+ 
 
-// ─────────────────────────────────────────────────────────────
+
+// 123
+// ────────── ───────────────────────────────────────────────────
 //  POST /alertas
 // ─────────────────────────────────────────────────────────────
 router.post('/', alertaLimiter, async (req, res) => {
