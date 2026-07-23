@@ -12,7 +12,7 @@ const path         = require('path');
 const alertasRoute = require('./routes/alertas');
 
 const app  = express();
-const PORT = process.env.PORT || 3000;
+const DEFAULT_PORT = Number(process.env.PORT) || 3000;
 
 // ── Middlewares globais ───────────────────────────────────────
 app.use(express.json());               // lê body JSON
@@ -45,13 +45,28 @@ app.use((err, req, res, next) => {
 });
 
 // ── Iniciar servidor ──────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`
+function startServer(port) {
+  const onError = (err) => {
+    if (err.code === 'EADDRINUSE') {
+      const nextPort = port + 1;
+      console.warn(`⚠️ Porta ${port} ocupado. Tentando ${nextPort}...`);
+      app.off('error', onError);
+      app.close(() => startServer(nextPort));
+    } else {
+      console.error('Erro ao iniciar servidor:', err);
+      process.exit(1);
+    }
+  };
+
+  app.on('error', onError);
+
+  app.listen(port, () => {
+    console.log(`
 ╔══════════════════════════════════════════════╗
 ║  🚨 BOTÃO DE EMERGÊNCIA — servidor iniciado  ║
 ╚══════════════════════════════════════════════╝
 
-✅  http://localhost:${PORT}
+✅  http://localhost:${port}
 
 Rotas disponíveis:
   POST   /alertas              → registrar alerta
@@ -62,4 +77,7 @@ Rotas disponíveis:
   PATCH  /alertas/:id/status   → atualizar status
   DELETE /alertas/:id          → deletar alerta
   `);
-});
+  });
+}
+
+startServer(DEFAULT_PORT);

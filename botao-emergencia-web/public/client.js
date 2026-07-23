@@ -5,7 +5,7 @@ let envioEmCurso = false;
 
 // Configuração
 const CONFIG = {
-    SERVIDOR_URL: 'http://localhost:3001'
+    SERVIDOR_URL: window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'http://localhost:3001'
 };
 
 btn.addEventListener('click', async () => {
