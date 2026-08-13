@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SUPERVISOR</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: #ffffff;
+      padding: 32px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 360px;
+    }
+
+    h2 {
+      margin-top: 0;
+      margin-bottom: 24px;
+      color: #1a1a1a;
+      text-align: center;
+      font-size: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #4a4a4a;
+      font-size: 14px;
+      font-weight: 600;
+      
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #cccccc;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      border-color: #007bff;
+    }
+
+    .form-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    button,
+    .btn-secondary {
+      display: inline-block;
+      width: 100%;
+      padding: 12px 14px;
+      background-color: #007bff;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.2s;
+      line-height: 1.2;
+    }
+
+    button:hover,
+    .btn-secondary:hover {
+      background-color: #0056b3;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background-color: #6c757d;
+    }
+
+    .btn-secondary:hover {
+      background-color: #5a6268;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h2>SUPERVISOR</h2>
+    <form action="#" method="POST">
+      
+      <div class="form-group">
+        <label for="login">Login / Usuário</label>
+        <input 
+          type="text" 
+          id="login" 
+          name="login" 
+          placeholder="Digite seu login" 
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="senha">Senha</label>
+        <input 
+          type="password" 
+          id="senha" 
+          name="senha" 
+          placeholder="Digite sua senha" 
+          required
+        >
+      </div>
+
+      <div class="form-actions">
+        
+        <a href="./logar-agente.html" class="btn-secondary">LOGAR</a>
+      </div>
+
+    </form>
+  </div>
+
+</body>
+</html>
