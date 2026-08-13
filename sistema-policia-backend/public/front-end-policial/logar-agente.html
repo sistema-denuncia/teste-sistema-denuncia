@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cadastro de Usuário</title>
+  <style>
+    /* Configurações globais e reset simples */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    body {
+      background-color: #f4f6f9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    /* Card principal do formulário */
+    .card-cadastro {
+      background: #ffffff;
+      padding: 40px 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .card-cadastro h2 {
+      color: #1a1a1a;
+      font-size: 24px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .card-cadastro p {
+      color: #666666;
+      font-size: 14px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    /* Agrupamento dos campos */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      color: #333333;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #cccccc;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s ease-in-out;
+    }
+
+    /* Efeito ao clicar no campo de texto */
+    .form-group input:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+
+    /* Botão de envio */
+    .btn-cadastrar {
+      width: 100%;
+      padding: 12px;
+      background-color: #4f46e5;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-cadastrar:hover {
+      background-color: #4338ca;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card-cadastro">
+    <h2>CADASTRO DO AGENTE</h2>
+    <p>Informe seus dados para se cadastrar</p>
+
+    <form action="#" method="POST">
+      <!-- Campo Login -->
+      <div class="form-group">
+        <label for="login">Login</label>
+        <input 
+          type="text" 
+          id="login" 
+          name="login" 
+          placeholder="Digite seu usuário" 
+          required
+        >
+      </div>
+
+      <!-- Campo Senha -->
+      <div class="form-group">
+        <label for="senha">Senha</label>
+        <input 
+          type="password" 
+          id="senha" 
+          name="senha" 
+          placeholder="Digite sua senha" 
+          required
+        >
+      </div>
+
+      <!-- Botão de Cadastro -->
+      <button type="submit" class="btn-cadastrar">Cadastrar</button>
+    </form>
+  </div>
+
+</body>
+</html>
