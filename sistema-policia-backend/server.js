@@ -76,7 +76,6 @@ io.on('connection', async (socket) => {
       localizacao: row.latitude === null && row.longitude === null ? null : {
         latitude: row.latitude,
         longitude: row.longitude,
-        acuracia: row.acuracia_metros,
       },
       dispositivo: row.dispositivo,
       ipOrigem: row.ip_origem,

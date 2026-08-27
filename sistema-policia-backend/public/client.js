@@ -33,22 +33,9 @@ function formatarStatus(status) {
     }[status] || status;
 }
 
-// O SQLite grava criado_em/atualizado_em/encerrado_em em UTC no formato
-// "AAAA-MM-DD HH:MM:SS" (sem "T" e sem "Z"). Sem indicação de fuso, o
-// navegador assume que essa string já está no horário local do usuário e
-// exibe a hora errada (ex.: mostra a hora UTC como se fosse a de Brasília,
-// um erro de 3h). Aqui normalizamos para ISO com "Z" antes de interpretar,
-// garantindo a conversão correta para o fuso local de quem está vendo o painel.
-function normalizarDataUTC(dataString) {
-    if (!dataString) return null;
-    const jaTemFuso = /Z$|[+-]\d{2}:?\d{2}$/.test(dataString);
-    const iso = dataString.includes('T') ? dataString : dataString.replace(' ', 'T');
-    return jaTemFuso ? iso : `${iso}Z`;
-}
-
 function formatarData(dataString) {
     if (!dataString) return '—';
-    const data = new Date(normalizarDataUTC(dataString));
+    const data = new Date(dataString);
     if (Number.isNaN(data.getTime())) return '—';
     return data.toLocaleString('pt-BR', {
         day: '2-digit', month: '2-digit', year: 'numeric',
@@ -58,7 +45,7 @@ function formatarData(dataString) {
 
 function formatarHorario(dataString) {
     if (!dataString) return '--:--:--';
-    const data = new Date(normalizarDataUTC(dataString));
+    const data = new Date(dataString);
     return Number.isNaN(data.getTime()) ? '--:--:--' : data.toLocaleTimeString('pt-BR');
 }
 
@@ -126,7 +113,7 @@ function renderizarAlertas() {
                 <div class="alerta-localizacao">
                     <strong>Geolocalização</strong>
                     ${temLocalizacao
-                        ? `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)} · precisão ${formatarAcuracia(alerta.localizacao?.acuracia)} · mapa disponível na abertura`
+                        ? 'Mapa disponível na abertura da ocorrência'
                         : 'Posição não disponível'}
                 </div>
 
@@ -159,18 +146,9 @@ function abrirDetalhes(id) {
         </div>
         <div class="modal-section">
             <h4>LOCALIZAÇÃO</h4>
-            ${temLocalizacao ? `
-                <div id="mapaOcorrencia" class="mapa-ocorrencia" aria-label="Mapa da localização da ocorrência"></div>
-                <div class="mapa-detalhes">
-                    <span>Coordenadas: <strong>${Number(localizacao.latitude).toFixed(6)}, ${Number(localizacao.longitude).toFixed(6)}</strong></span>
-                    <span>Precisão: <strong>${formatarAcuracia(localizacao.acuracia)}</strong></span>
-                    <a href="https://www.google.com/maps/search/?api=1&query=${Number(localizacao.latitude)},${Number(localizacao.longitude)}" target="_blank" rel="noopener noreferrer" class="mapa-link">Abrir no Google Maps ↗</a>
-                </div>
-                ${precisaoBaixa(localizacao.acuracia)
-                    ? '<p class="mapa-alerta">⚠ Precisão baixa: o ponto no mapa pode estar deslocado. Se possível, confirme o endereço diretamente com o solicitante.</p>'
-                    : ''}
-                <p class="mapa-ajuda">Ponto registrado no momento do acionamento${Number.isFinite(Number(localizacao.acuracia)) ? '; o círculo mostra a margem de erro do GPS' : ''}.</p>
-            ` : '<p>Localização não enviada no acionamento.</p>'}
+            ${temLocalizacao
+                ? '<div id="mapaOcorrencia" class="mapa-ocorrencia" aria-label="Mapa da localização da ocorrência"></div><p class="mapa-ajuda">Ponto registrado no momento do acionamento.</p>'
+                : '<p>Localização não enviada no acionamento.</p>'}
         </div>
         <div class="modal-section">
             <h4>OBSERVAÇÕES</h4>
@@ -185,81 +163,25 @@ function abrirDetalhes(id) {
     $('modalAlerta').setAttribute('aria-hidden', 'false');
 
     if (temLocalizacao) {
-        criarMapaOcorrencia(Number(localizacao.latitude), Number(localizacao.longitude), Number(localizacao.acuracia));
-    }
-}
+        if (mapaLocalizacao) mapaLocalizacao.remove();
 
-// Ícone customizado em formato de "alvo" para destacar o ponto do acionamento
-// entre as camadas de mapa padrão do Leaflet.
-const iconeOcorrencia = L.divIcon({
-    className: 'marcador-ocorrencia',
-    html: '<span class="marcador-pulso"></span><span class="marcador-nucleo"></span>',
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-});
+        mapaLocalizacao = L.map('mapaOcorrencia').setView([
+            Number(localizacao.latitude),
+            Number(localizacao.longitude),
+        ], 16);
 
-function formatarAcuracia(acuraciaMetros) {
-    if (!Number.isFinite(Number(acuraciaMetros))) return 'não informada pelo dispositivo';
-    const metros = Number(acuraciaMetros);
-    if (metros < 1000) return `± ${Math.round(metros)} m`;
-    return `± ${(metros / 1000).toFixed(1)} km`;
-}
-
-// Acima disso, o ponto no mapa é só uma referência aproximada — não dá pra
-// confiar nele como o endereço exato (típico de geolocalização por Wi-Fi/torre
-// de celular em vez de GPS com sinal de satélite).
-const LIMITE_PRECISAO_BAIXA_M = 100;
-
-function precisaoBaixa(acuraciaMetros) {
-    return Number.isFinite(Number(acuraciaMetros)) && Number(acuraciaMetros) > LIMITE_PRECISAO_BAIXA_M;
-}
-
-function criarMapaOcorrencia(latitude, longitude, acuraciaMetros) {
-    if (mapaLocalizacao) {
-        mapaLocalizacao.remove();
-        mapaLocalizacao = null;
-    }
-
-    mapaLocalizacao = L.map('mapaOcorrencia', {
-        scrollWheelZoom: true,
-    }).setView([latitude, longitude], 16);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(mapaLocalizacao);
-
-    L.marker([latitude, longitude], { icon: iconeOcorrencia })
-        .addTo(mapaLocalizacao)
-        .bindPopup(`Local do acionamento<br>Precisão: ${formatarAcuracia(acuraciaMetros)}`)
-        .openPopup();
-
-    // Quando o dispositivo informa a acurácia do GPS, desenhamos o raio de
-    // incerteza real e enquadramos o mapa nele, em vez de usar um zoom fixo
-    // que pode esconder o quão impreciso (ou preciso) o ponto realmente é.
-    const temAcuracia = Number.isFinite(acuraciaMetros) && acuraciaMetros > 0;
-    if (temAcuracia) {
-        const corPrecisao = precisaoBaixa(acuraciaMetros) ? '#ffa940' : '#ff4d4f';
-        const circulo = L.circle([latitude, longitude], {
-            radius: acuraciaMetros,
-            color: corPrecisao,
-            weight: 1,
-            fillColor: corPrecisao,
-            fillOpacity: 0.12,
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors',
         }).addTo(mapaLocalizacao);
 
-        // maxZoom 19 = zoom máximo que o OpenStreetMap fornece: quando a
-        // precisão é ótima (poucos metros), deixamos o mapa aproximar até o
-        // limite real dos tiles, em vez de travar num zoom intermediário que
-        // faz parecer que o ponto está "impreciso" quando na verdade só
-        // estava sendo exibido de longe demais.
-        mapaLocalizacao.fitBounds(circulo.getBounds(), { maxZoom: 19, padding: [24, 24] });
-    }
+        L.marker([
+            Number(localizacao.latitude),
+            Number(localizacao.longitude),
+        ]).addTo(mapaLocalizacao).bindPopup('Local do acionamento').openPopup();
 
-    // O Leaflet calcula o tamanho do mapa com base no container visível;
-    // como o modal acabou de ser exibido, forçamos um recálculo após a
-    // renderização para evitar tiles cortados ou cinza.
-    setTimeout(() => mapaLocalizacao.invalidateSize(), 0);
+        setTimeout(() => mapaLocalizacao.invalidateSize(), 0);
+    }
 }
 
 async function atualizarStatus(id, novoStatus) {

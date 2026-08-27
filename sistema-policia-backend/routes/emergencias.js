@@ -26,11 +26,10 @@ function normalizarNumero(valor) {
 }
 
 function validarLocalizacao(localizacao) {
-  if (!localizacao) return { latitude: null, longitude: null, acuracia: null };
+  if (!localizacao) return { latitude: null, longitude: null };
 
   const latitude = normalizarNumero(localizacao.latitude);
   const longitude = normalizarNumero(localizacao.longitude);
-  const acuracia = normalizarNumero(localizacao.acuracia);
 
   if (latitude !== null && (latitude < -90 || latitude > 90)) {
     throw new Error('Latitude inválida.');
@@ -38,17 +37,8 @@ function validarLocalizacao(localizacao) {
   if (longitude !== null && (longitude < -180 || longitude > 180)) {
     throw new Error('Longitude inválida.');
   }
-  if (acuracia !== null && acuracia < 0) {
-    throw new Error('Acurácia inválida.');
-  }
 
-  // Latitude e longitude só têm valor operacional juntas; se só uma veio
-  // preenchida, tratamos a posição inteira como ausente.
-  if (latitude === null || longitude === null) {
-    return { latitude: null, longitude: null, acuracia: null };
-  }
-
-  return { latitude, longitude, acuracia };
+  return { latitude, longitude };
 }
 
 function formatarAlerta(row) {
@@ -64,7 +54,6 @@ function formatarAlerta(row) {
       : {
           latitude: row.latitude,
           longitude: row.longitude,
-          acuracia: row.acuracia_metros,
         },
     dispositivo: row.dispositivo,
     ipOrigem: row.ip_origem,
@@ -117,8 +106,8 @@ router.post('/', emergenciaLimiter, async (req, res) => {
     await run(
       `INSERT INTO alertas_policia
         (id, protocolo, cliente_id, tipo, status, prioridade, latitude, longitude,
-         acuracia_metros, dispositivo, ip_origem)
-         VALUES (?, ?, ?, ?, 'ATIVO', ?, ?, ?, ?, ?, ?)`,
+         dispositivo, ip_origem)
+         VALUES (?, ?, ?, ?, 'ATIVO', ?, ?, ?, ?, ?)`,
       [
         id,
         protocolo,
@@ -127,7 +116,6 @@ router.post('/', emergenciaLimiter, async (req, res) => {
         prioridadeFinal,
         loc.latitude,
         loc.longitude,
-        loc.acuracia,
         dispositivoFinal,
         getIp(req),
       ]
