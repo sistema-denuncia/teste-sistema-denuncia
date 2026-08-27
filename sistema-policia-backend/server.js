@@ -1,285 +1,135 @@
-// ============================================================
-//  sistema-policia-backend/server.js
-//  Recebe alertas do botão de emergência e exibe no painel
-//  em tempo real via WebSocket.
-// ============================================================
-
 require('dotenv').config();
 
-const express   = require('express');
-const http      = require('http');
-const socketIo  = require('socket.io');
-const cors      = require('cors');
-const { v4: uuidv4 } = require('uuid');
-const path      = require('path');
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const socketIo = require('socket.io');
+const { databaseFile, inicializarBanco, testarConexao, all, fecharBanco } = require('./db');
+const emergenciasRoute = require('./routes/emergencias');
 
-const app    = express();
+const app = express();
 const server = http.createServer(app);
-const io     = socketIo(server, {
-  cors: { origin: '*', methods: ['GET', 'POST', 'PATCH'] }
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.PAINEL_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PATCH'],
+  },
 });
 
-// ── Configurações ─────────────────────────────────────────────
-const PORT    = process.env.PORT    || 3001;
-const API_KEY = process.env.POLICIA_API_KEY;
+const PORT = Number(process.env.PORT || 3001);
+const API_KEY = process.env.POLICIA_API_KEY || 'desenvolvimento-local';
 
-if (!API_KEY) {
-  console.error('❌ POLICIA_API_KEY não definida no .env');
-  process.exit(1);
-}
+app.set('io', io);
+app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : false);
+app.use(express.json({ limit: '64kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Middleware ────────────────────────────────────────────────
-app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
+app.use('/api/emergencia', (req, res, next) => {
+  if (req.method !== 'POST') return next();
 
-// ── Armazenamento em memória (usado enquanto não há banco) ────
-let alertasMemoria = [];
-let usuariosConectados = [];
-
-// ── Flag: banco disponível ou não ────────────────────────────
-// Troque para true quando o MySQL estiver pronto
-const BANCO_ATIVO = false;
-
-// ── Importa o db só se o banco estiver ativo ─────────────────
-const db = BANCO_ATIVO ? require('./db') : null;
-
-// ============================================================
-//  ROTAS API
-// ============================================================
-
-// ── POST /api/emergencia ──────────────────────────────────────
-app.post('/api/emergencia', async (req, res) => {
-  const { apiKey, localizacao, dispositivo, ...resto } = req.body;
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
-
-  if (apiKey !== API_KEY) {
-    return res.status(401).json({ sucesso: false, mensagem: 'Chave API inválida.' });
+  const chave = req.get('X-API-Key');
+  if (!chave || chave !== API_KEY) {
+    return res.status(401).json({ sucesso: false, mensagem: 'Chave de API inválida.' });
   }
+  next();
+});
 
+app.use('/api/emergencia', emergenciasRoute);
+
+app.get('/api/saude', async (req, res) => {
   try {
-    const alerta = {
-      id         : uuidv4(),
-      protocolo  : `EMERG-${Date.now()}`,
-      tipo       : resto.tipo       || 'EMERGENCIA',
-      status     : 'ATIVO',
-      prioridade : resto.prioridade || 'ALTA',
-      latitude   : localizacao?.latitude  || null,
-      longitude  : localizacao?.longitude || null,
-      dispositivo: dispositivo ? JSON.stringify(dispositivo) : null,
-      ip_origem  : ip,
-      criado_em  : new Date().toISOString(),
-      dataLocal  : new Date().toLocaleString('pt-BR'),
-    };
-
-    if (BANCO_ATIVO) {
-      // Salva no banco quando disponível
-      await db.execute(
-        `INSERT INTO alertas_policia
-           (id, protocolo, tipo, status, prioridade, latitude, longitude, dispositivo, ip_origem)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          alerta.id, alerta.protocolo, alerta.tipo, alerta.status,
-          alerta.prioridade, alerta.latitude, alerta.longitude,
-          alerta.dispositivo, alerta.ip_origem
-        ]
-      );
-    } else {
-      // Salva em memória enquanto não há banco
-      alertasMemoria.unshift(alerta);
-      if (alertasMemoria.length > 100) alertasMemoria.pop();
-    }
-
-    console.log(`🚨 [${alerta.dataLocal}] NOVO ALERTA: ${alerta.protocolo}`);
-
-    io.emit('novo-alerta', alerta);
-    io.emit('tocar-som-alerta');
-    io.emit('mostrar-notificacao', {
-      titulo  : '🚨 ALERTA DE EMERGÊNCIA',
-      mensagem: `Protocolo: ${alerta.protocolo}`,
-      alerta,
+    await testarConexao();
+    res.json({
+      sucesso: true,
+      servidor: 'online',
+      banco: 'online',
+      bancoTipo: 'SQLite',
+      arquivoBanco: databaseFile,
     });
-
-    return res.status(200).json({
-      sucesso  : true,
-      mensagem : 'Alerta recebido com sucesso.',
-      id       : alerta.id,
-      protocolo: alerta.protocolo,
-    });
-
   } catch (err) {
-    console.error('Erro ao processar alerta:', err.message);
-    return res.status(500).json({ sucesso: false, mensagem: 'Erro ao processar o alerta.' });
+    res.status(503).json({ sucesso: false, servidor: 'online', banco: 'offline' });
   }
 });
 
-// ── GET /api/alertas ──────────────────────────────────────────
-app.get('/api/alertas', async (req, res) => {
-  const { status } = req.query;
-
-  try {
-    if (BANCO_ATIVO) {
-      let sql      = 'SELECT * FROM alertas_policia WHERE 1=1';
-      const params = [];
-      if (status) { sql += ' AND status = ?'; params.push(status); }
-      sql += ' ORDER BY criado_em DESC LIMIT 100';
-      const [alertas] = await db.execute(sql, params);
-      return res.json({ total: alertas.length, alertas });
-    } else {
-      const alertas = status
-        ? alertasMemoria.filter(a => a.status === status)
-        : alertasMemoria;
-      return res.json({ total: alertas.length, alertas });
-    }
-  } catch (err) {
-    console.error('Erro ao buscar alertas:', err.message);
-    return res.status(500).json({ sucesso: false, mensagem: 'Erro ao buscar alertas.' });
-  }
-});
-
-// ── GET /api/alertas/:id ──────────────────────────────────────
-app.get('/api/alertas/:id', async (req, res) => {
-  try {
-    if (BANCO_ATIVO) {
-      const [rows] = await db.execute(
-        'SELECT * FROM alertas_policia WHERE id = ?',
-        [req.params.id]
-      );
-      if (rows.length === 0) {
-        return res.status(404).json({ sucesso: false, mensagem: 'Alerta não encontrado.' });
-      }
-      return res.json(rows[0]);
-    } else {
-      const alerta = alertasMemoria.find(a => a.id === req.params.id);
-      if (!alerta) {
-        return res.status(404).json({ sucesso: false, mensagem: 'Alerta não encontrado.' });
-      }
-      return res.json(alerta);
-    }
-  } catch (err) {
-    console.error('Erro ao buscar alerta:', err.message);
-    return res.status(500).json({ sucesso: false, mensagem: 'Erro ao buscar alerta.' });
-  }
-});
-
-// ── PATCH /api/alertas/:id/status ────────────────────────────
-app.patch('/api/alertas/:id/status', async (req, res) => {
-  const { status, observacoes } = req.body;
-  const STATUS_VALIDOS = ['ATIVO', 'EM_ATENDIMENTO', 'RESOLVIDO', 'FALSO_ALARME'];
-
-  if (!STATUS_VALIDOS.includes(status)) {
-    return res.status(400).json({
-      sucesso: false,
-      mensagem: `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}`,
-    });
-  }
-
-  try {
-    if (BANCO_ATIVO) {
-      const [result] = await db.execute(
-        `UPDATE alertas_policia SET status = ?, observacoes = ?, atualizado_em = NOW() WHERE id = ?`,
-        [status, observacoes || null, req.params.id]
-      );
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ sucesso: false, mensagem: 'Alerta não encontrado.' });
-      }
-      const [rows] = await db.execute('SELECT * FROM alertas_policia WHERE id = ?', [req.params.id]);
-      io.emit('alerta-atualizado', rows[0]);
-      return res.json({ sucesso: true, mensagem: 'Status atualizado.', alerta: rows[0] });
-    } else {
-      const alerta = alertasMemoria.find(a => a.id === req.params.id);
-      if (!alerta) {
-        return res.status(404).json({ sucesso: false, mensagem: 'Alerta não encontrado.' });
-      }
-      alerta.status      = status;
-      alerta.observacoes = observacoes || alerta.observacoes;
-      alerta.atualizadoEm = new Date().toISOString();
-      io.emit('alerta-atualizado', alerta);
-      return res.json({ sucesso: true, mensagem: 'Status atualizado.', alerta });
-    }
-  } catch (err) {
-    console.error('Erro ao atualizar status:', err.message);
-    return res.status(500).json({ sucesso: false, mensagem: 'Erro ao atualizar status.' });
-  }
-});
-
-// ── 404 ───────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ erro: `Rota "${req.method} ${req.path}" não encontrada.` });
 });
 
-// ============================================================
-//  WEBSOCKET
-// ============================================================
+app.use((err, req, res, next) => {
+  console.error('Erro inesperado:', err);
+  res.status(500).json({ sucesso: false, mensagem: 'Erro interno no servidor.' });
+});
 
 io.on('connection', async (socket) => {
-  console.log(`✅ Policial conectado: ${socket.id}`);
-  usuariosConectados.push(socket.id);
+  try {
+    const rows = await all(
+      'SELECT * FROM alertas_policia ORDER BY criado_em DESC LIMIT 100'
+    );
 
-  if (BANCO_ATIVO) {
-    try {
-      const [alertas] = await db.execute(
-        'SELECT * FROM alertas_policia ORDER BY criado_em DESC LIMIT 100'
-      );
-      socket.emit('carregar-alertas', alertas);
-    } catch (err) {
-      console.error('Erro ao carregar alertas:', err.message);
-    }
-  } else {
-    socket.emit('carregar-alertas', alertasMemoria);
+    const alertas = rows.map((row) => ({
+      id: row.id,
+      protocolo: row.protocolo,
+      clienteId: row.cliente_id,
+      tipo: row.tipo,
+      status: row.status,
+      prioridade: row.prioridade,
+      localizacao: row.latitude === null && row.longitude === null ? null : {
+        latitude: row.latitude,
+        longitude: row.longitude,
+        acuracia: row.acuracia_metros,
+      },
+      dispositivo: row.dispositivo,
+      ipOrigem: row.ip_origem,
+      origem: row.origem,
+      observacoes: row.observacoes,
+      timestamp: row.criado_em,
+      atualizadoEm: row.atualizado_em,
+      encerradoEm: row.encerrado_em,
+    }));
+
+    socket.emit('carregar-alertas', alertas);
+  } catch (err) {
+    console.error('Erro ao carregar alertas no Socket.IO:', err);
   }
 
-  io.emit('usuarios-conectados', usuariosConectados.length);
-
-  socket.on('atualizar-alerta', async (dados) => {
-    if (BANCO_ATIVO) {
-      try {
-        await db.execute(
-          `UPDATE alertas_policia SET status = ?, observacoes = ?, atualizado_em = NOW() WHERE id = ?`,
-          [dados.status, dados.observacoes || null, dados.id]
-        );
-        const [rows] = await db.execute('SELECT * FROM alertas_policia WHERE id = ?', [dados.id]);
-        if (rows.length > 0) io.emit('alerta-atualizado', rows[0]);
-      } catch (err) {
-        console.error('Erro ao atualizar alerta via WebSocket:', err.message);
-      }
-    } else {
-      const alerta = alertasMemoria.find(a => a.id === dados.id);
-      if (alerta) {
-        alerta.status      = dados.status;
-        alerta.observacoes = dados.observacoes;
-        alerta.atualizadoEm = new Date().toISOString();
-        io.emit('alerta-atualizado', alerta);
-      }
-    }
-  });
+  io.emit('usuarios-conectados', io.engine.clientsCount);
 
   socket.on('disconnect', () => {
-    console.log(`❌ Policial desconectado: ${socket.id}`);
-    usuariosConectados = usuariosConectados.filter(id => id !== socket.id);
-    io.emit('usuarios-conectados', usuariosConectados.length);
+    io.emit('usuarios-conectados', io.engine.clientsCount);
   });
 });
 
-// ============================================================
-//  INICIAR
-// ============================================================
+async function iniciar() {
+  try {
+    await inicializarBanco();
+    await testarConexao();
 
-server.listen(PORT, () => {
-  console.log(`
-╔══════════════════════════════════════════════╗
-║  🚔 SISTEMA DE EMERGÊNCIA DA POLÍCIA         ║
-╚══════════════════════════════════════════════╝
+    console.log('SQLite conectado com sucesso.');
+    console.log(`Banco: ${databaseFile}`);
 
-✅  http://localhost:${PORT}
-📡  WebSocket: ws://localhost:${PORT}
-💾  Banco: ${BANCO_ATIVO ? 'MySQL ativo' : 'memória (sem banco)'}
+    server.listen(PORT, () => {
+      console.log(`Sistema policial disponível em http://localhost:${PORT}`);
+      console.log(`Saúde: http://localhost:${PORT}/api/saude`);
+    });
+  } catch (err) {
+    console.error('Não foi possível iniciar o sistema.');
+    console.error(err);
+    process.exit(1);
+  }
+}
 
-Rotas:
-  POST  /api/emergencia         → receber alerta
-  GET   /api/alertas            → listar alertas
-  GET   /api/alertas?status=ATIVO
-  GET   /api/alertas/:id        → buscar alerta
-  PATCH /api/alertas/:id/status → atualizar status
-  `);
-});
+async function encerrar(signal) {
+  console.log(`Encerrando (${signal})...`);
+  server.close(async () => {
+    try {
+      await fecharBanco();
+    } finally {
+      process.exit(0);
+    }
+  });
+}
+
+process.on('SIGINT', () => encerrar('SIGINT'));
+process.on('SIGTERM', () => encerrar('SIGTERM'));
+
+iniciar();

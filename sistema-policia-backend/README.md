@@ -1,37 +1,40 @@
-# 🚔 Sistema de Emergência com Painel da Polícia
+# Sistema de Denúncia / Emergência — SQLite
 
-Este projeto consiste em duas aplicações integradas:
+O backend da polícia usa **SQLite** como banco persistente. Não é necessário instalar, iniciar ou configurar MySQL.
 
-1. **Cliente Electron** - Botão de emergência para cidadãos
-2. **Backend Node.js** - Servidor que recebe alertas e painel web para a polícia
+## Fluxo
 
----
-
-## 📋 Estrutura do Projeto
-
-```
-├── teste-projeto-electron-main/     # Aplicação Electron (Cliente)
-│   ├── main.js
-│   ├── renderer.js
-│   ├── preload.js
-│   ├── index.html
-│   ├── style.css
-│   └── package.json
-│
-└── sistema-policia-backend/         # Backend + Painel Web
-    ├── server.js
-    ├── package.json
-    └── public/
-        ├── index.html
-        ├── style.css
-        └── client.js
+```text
+Usuário
+  │
+  │ POST /api/emergencia
+  ▼
+Botão de emergência (porta 3000)
+  │
+  │ X-API-Key servidor -> servidor
+  ▼
+Backend da polícia (porta 3001)
+  │
+  ├── grava no SQLite
+  └── emite novo-alerta via Socket.IO
+            │
+            ▼
+      Painel da polícia
 ```
 
----
+## Banco
 
-## 🚀 Como Usar
+O banco é criado automaticamente na primeira inicialização:
 
-### 1. Instalar e Iniciar o Servidor da Polícia
+```text
+database/emergencia.db
+```
+
+O backend também cria a tabela e os índices automaticamente. Não é necessário executar `schema.sql` manualmente.
+
+## Execução
+
+### 1. Backend da polícia
 
 ```bash
 cd sistema-policia-backend
@@ -39,228 +42,41 @@ npm install
 npm start
 ```
 
-O servidor iniciará em `http://localhost:3001`
+Na primeira execução, o arquivo `database/emergencia.db` será criado automaticamente.
 
-### 2. Abrir o Painel da Polícia
-
-- Abra seu navegador e acesse: `http://localhost:3001`
-- Você verá o painel em tempo real para receber alertas
-
-### 3. Iniciar o Cliente Electron
+### 2. Backend do botão
 
 Em outro terminal:
 
 ```bash
-cd teste-projeto-electron-main
+cd botao-emergencia-web
+npm install
 npm start
 ```
 
-A aplicação Electron abrirá com o botão de emergência
+Abra:
 
----
+- Usuário: `http://localhost:3000`
+- Polícia: `http://localhost:3001`
+- Saúde da polícia: `http://localhost:3001/api/saude`
 
-## ⚙️ Configuração
+## Configuração da chave
 
-### Variáveis de Ambiente
+Crie `sistema-policia-backend/.env` a partir de `.env.example` se quiser alterar a chave padrão.
 
-Você pode configurar a chave API e URL do servidor através de variáveis de ambiente:
+No backend do botão, o `.env` deve usar a mesma chave em `POLICIA_API_KEY`.
 
-**Windows:**
-```bash
-set POLICIA_SERVER_URL=http://seu-servidor.com:3001
-set POLICIA_API_KEY=sua-chave-api-segura
-```
+Para desenvolvimento local, `desenvolvimento-local` já funciona, mas para apresentação/rede real use uma chave longa e aleatória.
 
-**Linux/Mac:**
-```bash
-export POLICIA_SERVER_URL=http://seu-servidor.com:3001
-export POLICIA_API_KEY=sua-chave-api-segura
-```
+## Estados da ocorrência
 
----
+- `ATIVO`
+- `EM_ATENDIMENTO`
+- `RESOLVIDO`
+- `FALSO_ALARME`
 
-## 🔄 Fluxo de Funcionamento
+## Persistência
 
-1. **Usuário pressiona o botão de emergência** na aplicação Electron
-2. **Confirmação dupla** - clique novamente para confirmar
-3. **Dados coletados:**
-   - ID único
-   - Timestamp
-   - Tipo de alerta (EMERGENCIA)
-   - Geolocalização (se disponível)
-   - Informações do dispositivo
-4. **Enviado para o servidor** via HTTP POST
-5. **Painel da polícia recebe em tempo real** via WebSocket
-6. **Sons e notificações** são acionados
-7. **Policiais podem atualizar o status** (Em Atendimento → Resolvido)
+As ocorrências continuam disponíveis depois que o backend é reiniciado porque são armazenadas no arquivo SQLite.
 
----
-
-## 🎯 Funcionalidades
-
-### Cliente Electron
-- ✅ Botão de emergência com confirmação dupla
-- ✅ Coleta de geolocalização
-- ✅ Feedback visual com animações
-- ✅ Notificações do sistema
-- ✅ Indicador de status de envio
-
-### Painel da Polícia
-- ✅ Receber alertas em tempo real
-- ✅ Visualizar detalhes completos
-- ✅ Som e notificação visual ao chegar novo alerta
-- ✅ Filtrar alertas (Ativos, Em Atendimento, Resolvidos)
-- ✅ Atualizar status do alerta
-- ✅ Ver quantidade de usuários conectados
-- ✅ Interface responsiva
-
-### Backend
-- ✅ API REST para receber alertas
-- ✅ WebSocket para comunicação em tempo real
-- ✅ Validação de chave API
-- ✅ Armazenamento em memória de alertas
-- ✅ Endpoints para gerenciar alertas
-
----
-
-## 📡 API Endpoints
-
-### Receber Alerta
-```
-POST /api/emergencia
-Content-Type: application/json
-
-{
-  "id": "1780960306011",
-  "timestamp": "2026-06-08T23:11:46.011Z",
-  "tipo": "EMERGENCIA",
-  "dispositivo": "...",
-  "localizacao": {
-    "latitude": -23.5505,
-    "longitude": -46.6333
-  },
-  "status": "ALERTA_ACIONADO",
-  "apiKey": "sua-chave-api"
-}
-```
-
-### Obter Todos os Alertas
-```
-GET /api/alertas
-```
-
-### Obter Alerta Específico
-```
-GET /api/alertas/:id
-```
-
-### Atualizar Status
-```
-PATCH /api/alertas/:id/status
-Content-Type: application/json
-
-{
-  "status": "EM_ATENDIMENTO",
-  "observacoes": "Policial designado"
-}
-```
-
----
-
-## 🔒 Segurança
-
-- ✅ Validação de chave API em cada requisição
-- ✅ CORS habilitado apenas para localhost (ajuste conforme necessário)
-- ✅ Context isolation no Electron
-- ✅ Preload script isolado
-
-### ⚠️ Para Produção:
-1. Usar HTTPS em vez de HTTP
-2. Implementar autenticação mais robusta (JWT, OAuth)
-3. Adicionar rate limiting
-4. Validar e sanitizar dados de entrada
-5. Usar banco de dados real (PostgreSQL, MongoDB)
-6. Implementar logs detalhados
-
----
-
-## 🛠️ Troubleshooting
-
-### Erro de conexão
-- Verifique se o servidor está rodando em `http://localhost:3001`
-- Verifique a chave API em ambas as aplicações
-
-### Alertas não chegam no painel
-- Abra o console do navegador (F12) e verifique erros
-- Verifique se o WebSocket está conectado
-- Verifique os logs do servidor
-
-### Geolocalização não funciona
-- Aceite a permissão de acesso à localização
-- A geolocalização pode não funcionar em localhost (em produção funcionará melhor)
-
----
-
-## 📝 Arquitetura
-
-```
-┌─────────────────────────────┐
-│   Aplicação Electron        │
-│   (Cliente - Cidadão)       │
-└──────────────┬──────────────┘
-               │
-               │ HTTP POST
-               │ (Alerta)
-               ▼
-┌─────────────────────────────┐
-│   Node.js + Express         │
-│   (Servidor - API)          │
-└──────────────┬──────────────┘
-               │
-               │ WebSocket
-               │
-               ▼
-┌─────────────────────────────┐
-│   Painel Web Browser        │
-│   (Polícia - Dashboard)     │
-└─────────────────────────────┘
-```
-
----
-
-## 📦 Dependências
-
-### Cliente Electron
-- electron
-- axios
-
-### Backend
-- express
-- socket.io
-- cors
-- uuid
-
----
-
-## 📄 Licença
-
-ISC
-
----
-
-## 👨‍💻 Desenvolvedor
-
-Sistema criado para demonstrar integração entre Electron e WebSocket
-
----
-
-## 🚀 Próximas Melhorias Sugeridas
-
-- [ ] Banco de dados persistente
-- [ ] Autenticação de usuários
-- [ ] Histórico detalhado de alertas
-- [ ] Integração com maps
-- [ ] Envio de alertas por email/SMS
-- [ ] Análise de dados e estatísticas
-- [ ] Sistema de rotas otimizadas para policiais
-- [ ] Integração com câmeras de segurança
+O arquivo do banco é ignorado pelo Git para evitar que dados reais sejam versionados.

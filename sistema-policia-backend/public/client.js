@@ -1,320 +1,360 @@
-// Conexão Socket.io
 const socket = io();
 
-// Variáveis globais
 let alertas = [];
 let filtroAtual = 'ATIVO';
+let mapaLocalizacao = null;
 
-// ============================================
-// EVENTOS DO SOCKET.IO
-// ============================================
+const $ = (id) => document.getElementById(id);
 
-socket.on('connect', () => {
-    console.log('✅ Conectado ao servidor');
-    atualizarStatusConexao(true);
-});
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 
-socket.on('disconnect', () => {
-    console.log('❌ Desconectado do servidor');
-    atualizarStatusConexao(false);
-});
+function getClassePorStatus(status) {
+    return {
+        ATIVO: 'ativo',
+        EM_ATENDIMENTO: 'em-atendimento',
+        RESOLVIDO: 'resolvido',
+        FALSO_ALARME: 'falso-alarme'
+    }[status] || '';
+}
 
-// Carregar alertas quando conectar
-socket.on('carregar-alertas', (dados) => {
-    console.log('📦 Alertas carregados:', dados);
-    alertas = dados;
-    renderizarAlertas();
-    atualizarTotalAlertas();
-});
+function formatarStatus(status) {
+    return {
+        ATIVO: 'ATIVO',
+        EM_ATENDIMENTO: 'EM ATENDIMENTO',
+        RESOLVIDO: 'RESOLVIDO',
+        FALSO_ALARME: 'FALSO ALARME'
+    }[status] || status;
+}
 
-// Novo alerta recebido
-socket.on('novo-alerta', (alerta) => {
-    console.log('🚨 NOVO ALERTA:', alerta);
-    alertas.unshift(alerta);
-    renderizarAlertas();
-    atualizarTotalAlertas();
-    
-    // Tocar som de alerta
-    tocarSomAlerta();
-    
-    // Mostrar notificação
-    if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('🚨 ALERTA DE EMERGÊNCIA', {
-            body: `Protocolo: ${alerta.protocolo}`,
-            icon: '🚔'
-        });
-    }
-    
-    // Animar a chegada do novo alerta
-    const cards = document.querySelectorAll('.alerta-card');
-    if (cards.length > 0) {
-        cards[0].style.animation = 'slideIn 0.5s ease';
-    }
-});
+// O SQLite grava criado_em/atualizado_em/encerrado_em em UTC no formato
+// "AAAA-MM-DD HH:MM:SS" (sem "T" e sem "Z"). Sem indicação de fuso, o
+// navegador assume que essa string já está no horário local do usuário e
+// exibe a hora errada (ex.: mostra a hora UTC como se fosse a de Brasília,
+// um erro de 3h). Aqui normalizamos para ISO com "Z" antes de interpretar,
+// garantindo a conversão correta para o fuso local de quem está vendo o painel.
+function normalizarDataUTC(dataString) {
+    if (!dataString) return null;
+    const jaTemFuso = /Z$|[+-]\d{2}:?\d{2}$/.test(dataString);
+    const iso = dataString.includes('T') ? dataString : dataString.replace(' ', 'T');
+    return jaTemFuso ? iso : `${iso}Z`;
+}
 
-// Alerta atualizado
-socket.on('alerta-atualizado', (alerta) => {
-    console.log('✏️ Alerta atualizado:', alerta);
-    const index = alertas.findIndex(a => a.id === alerta.id);
-    if (index !== -1) {
-        alertas[index] = alerta;
-        renderizarAlertas();
-    }
-});
+function formatarData(dataString) {
+    if (!dataString) return '—';
+    const data = new Date(normalizarDataUTC(dataString));
+    if (Number.isNaN(data.getTime())) return '—';
+    return data.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+}
 
-// Quantidade de usuários conectados
-socket.on('usuarios-conectados', (quantidade) => {
-    document.getElementById('usuariosConectados').textContent = quantidade;
-});
+function formatarHorario(dataString) {
+    if (!dataString) return '--:--:--';
+    const data = new Date(normalizarDataUTC(dataString));
+    return Number.isNaN(data.getTime()) ? '--:--:--' : data.toLocaleTimeString('pt-BR');
+}
 
-// Tocar som de alerta
-socket.on('tocar-som-alerta', () => {
-    tocarSomAlerta();
-});
+function atualizarRelogio() {
+    $('relogio').textContent = new Date().toLocaleTimeString('pt-BR');
+}
 
-// ============================================
-// FUNÇÕES DE INTERFACE
-// ============================================
+function atualizarResumo() {
+    const ativos = alertas.filter(a => a.status === 'ATIVO').length;
+    const atendimento = alertas.filter(a => a.status === 'EM_ATENDIMENTO').length;
+    const resolvidas = alertas.filter(a => a.status === 'RESOLVIDO').length;
+
+    $('metricAtivos').textContent = ativos;
+    $('metricAtendimento').textContent = atendimento;
+    $('metricResolvidas').textContent = resolvidas;
+    $('badgeAtivos').textContent = ativos;
+    $('badgeAtendimento').textContent = atendimento;
+    $('badgeResolvidas').textContent = resolvidas;
+    $('totalAlertas').textContent = alertas.length;
+}
+
+function marcarAtualizacao() {
+    $('ultimaAtualizacao').textContent = `atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+}
 
 function renderizarAlertas() {
-    const lista = document.getElementById('alertasList');
-    
-    // Filtrar alertas baseado no filtro selecionado
-    let alertasFiltrados = alertas;
-    if (filtroAtual !== 'TODOS') {
-        alertasFiltrados = alertas.filter(a => a.status === filtroAtual);
-    }
+    const lista = $('alertasList');
+    const filtrados = filtroAtual === 'TODOS'
+        ? alertas
+        : alertas.filter(a => a.status === filtroAtual);
 
-    if (alertasFiltrados.length === 0) {
-        lista.innerHTML = '<div class="empty-state"><p>📭 Nenhum alerta no momento</p></div>';
+    atualizarResumo();
+
+    if (!filtrados.length) {
+        lista.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">—</div>
+                <strong>Nenhuma ocorrência nesta fila</strong>
+                <span>Os acionamentos recebidos serão inseridos automaticamente nesta área.</span>
+            </div>`;
         return;
     }
 
-    lista.innerHTML = alertasFiltrados.map(alerta => `
-        <div class="alerta-card ${getClassePorStatus(alerta.status)}" data-id="${alerta.id}">
-            <div class="alerta-header">
-                <span class="alerta-protocolo">${alerta.protocolo}</span>
-                <span class="alerta-status ${getClassePorStatus(alerta.status)}">${formatarStatus(alerta.status)}</span>
-            </div>
-            
-            <div class="alerta-info">
-                <div class="alerta-item">
-                    <span class="alerta-label">⏰ Horário:</span>
-                    <span class="alerta-value">${formatarData(alerta.timestamp)}</span>
-                </div>
-                <div class="alerta-item">
-                    <span class="alerta-label">🚨 Tipo:</span>
-                    <span class="alerta-value">${alerta.tipo}</span>
-                </div>
-                <div class="alerta-item">
-                    <span class="alerta-label">⚠️ Prioridade:</span>
-                    <span class="alerta-value">${alerta.prioridade}</span>
-                </div>
-            </div>
+    lista.innerHTML = filtrados.map(alerta => {
+        const classe = getClassePorStatus(alerta.status);
+        const latitude = alerta.localizacao?.latitude;
+        const longitude = alerta.localizacao?.longitude;
+        const temLocalizacao = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
 
-            ${alerta.localizacao && alerta.localizacao.latitude ? `
+        return `
+            <article class="alerta-card ${classe}" data-id="${escapeHtml(alerta.id)}">
+                <div class="alerta-header">
+                    <span class="alerta-protocolo">${escapeHtml(alerta.protocolo)}</span>
+                    <div class="alerta-main-title">${escapeHtml(alerta.tipo || 'EMERGÊNCIA')}</div>
+                    <div class="alerta-sub">Recebido em ${escapeHtml(formatarData(alerta.timestamp))}</div>
+                </div>
+
+                <div class="alerta-info">
+                    <div class="alerta-item"><span class="alerta-label">Status</span><span class="alerta-value"><span class="alerta-status ${classe}"><span class="status-dot"></span>${escapeHtml(formatarStatus(alerta.status))}</span></span></div>
+                    <div class="alerta-item"><span class="alerta-label">Prioridade</span><span class="alerta-value">${escapeHtml(alerta.prioridade || '—')}</span></div>
+                    <div class="alerta-item"><span class="alerta-label">Dispositivo</span><span class="alerta-value">${escapeHtml(alerta.dispositivo || 'Não informado')}</span></div>
+                    <div class="alerta-item"><span class="alerta-label">Cliente</span><span class="alerta-value">${escapeHtml(alerta.clienteId || '—')}</span></div>
+                </div>
+
                 <div class="alerta-localizacao">
-                    📍 Lat: ${alerta.localizacao.latitude.toFixed(4)}, Long: ${alerta.localizacao.longitude.toFixed(4)}
+                    <strong>Geolocalização</strong>
+                    ${temLocalizacao
+                        ? `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)} · precisão ${formatarAcuracia(alerta.localizacao?.acuracia)} · mapa disponível na abertura`
+                        : 'Posição não disponível'}
                 </div>
-            ` : ''}
 
-            <div class="alerta-acoes">
-                <button class="alerta-btn btn-ver-detalhes" onclick="abrirDetalhes('${alerta.id}')">
-                    📋 Detalhes
-                </button>
-                ${alerta.status === 'ATIVO' ? `
-                    <button class="alerta-btn btn-atender" onclick="atualizarStatus('${alerta.id}', 'EM_ATENDIMENTO')">
-                        🟡 Atender
-                    </button>
-                ` : ''}
-                ${alerta.status !== 'RESOLVIDO' ? `
-                    <button class="alerta-btn btn-resolver" onclick="atualizarStatus('${alerta.id}', 'RESOLVIDO')">
-                        ✓ Resolvido
-                    </button>
-                ` : ''}
-            </div>
-        </div>
-    `).join('');
+                <div class="alerta-acoes">
+                    <button class="alerta-btn btn-ver-detalhes" onclick="abrirDetalhes('${escapeHtml(alerta.id)}')">Abrir ocorrência</button>
+                    ${alerta.status === 'ATIVO' ? `<button class="alerta-btn btn-atender" onclick="atualizarStatus('${escapeHtml(alerta.id)}','EM_ATENDIMENTO')">Assumir</button>` : ''}
+                    ${alerta.status !== 'RESOLVIDO' ? `<button class="alerta-btn btn-resolver" onclick="atualizarStatus('${escapeHtml(alerta.id)}','RESOLVIDO')">Encerrar</button>` : ''}
+                </div>
+            </article>`;
+    }).join('');
 }
 
 function abrirDetalhes(id) {
     const alerta = alertas.find(a => a.id === id);
     if (!alerta) return;
 
-    const modal = document.getElementById('modalAlerta');
-    const modalBody = document.getElementById('modalBody');
+    const localizacao = alerta.localizacao;
+    const temLocalizacao = localizacao && Number.isFinite(Number(localizacao.latitude)) && Number.isFinite(Number(localizacao.longitude));
 
-    modalBody.innerHTML = `
-        <h2>🚨 ${alerta.protocolo}</h2>
-        <p><strong>Status:</strong> ${formatarStatus(alerta.status)}</p>
-        <p><strong>Tipo:</strong> ${alerta.tipo}</p>
-        <p><strong>Prioridade:</strong> ${alerta.prioridade}</p>
-        <p><strong>Data/Hora:</strong> ${formatarData(alerta.timestamp)}</p>
-        <p><strong>Dispositivo:</strong> ${alerta.dispositivo}</p>
-        
-        ${alerta.localizacao && alerta.localizacao.latitude ? `
-            <p><strong>📍 Localização:</strong><br>
-            Latitude: ${alerta.localizacao.latitude.toFixed(6)}<br>
-            Longitude: ${alerta.localizacao.longitude.toFixed(6)}<br>
-            Acurácia: ${alerta.localizacao.acuracia.toFixed(0)}m
-            </p>
-        ` : ''}
-
-        ${alerta.observacoes ? `<p><strong>Observações:</strong> ${alerta.observacoes}</p>` : ''}
-        ${alerta.atualizadoPor ? `<p><strong>Última atualização por:</strong> ${alerta.atualizadoPor}</p>` : ''}
-        
-        <div class="modal-actions">
-            ${alerta.status === 'ATIVO' ? `
-                <button class="modal-btn btn-atender" onclick="atualizarStatus('${alerta.id}', 'EM_ATENDIMENTO')">
-                    Marcar como Em Atendimento
-                </button>
-            ` : ''}
-            ${alerta.status !== 'RESOLVIDO' ? `
-                <button class="modal-btn btn-resolver" onclick="atualizarStatus('${alerta.id}', 'RESOLVIDO')">
-                    Marcar como Resolvido
-                </button>
-            ` : ''}
+    $('modalBody').innerHTML = `
+        <div class="modal-kicker">FICHA OPERACIONAL / ${escapeHtml(alerta.protocolo)}</div>
+        <h2 class="modal-title">${escapeHtml(alerta.tipo || 'EMERGÊNCIA')}</h2>
+        <div class="detail-grid">
+            <div class="detail-card"><span>Status</span><strong>${escapeHtml(formatarStatus(alerta.status))}</strong></div>
+            <div class="detail-card"><span>Prioridade</span><strong>${escapeHtml(alerta.prioridade || '—')}</strong></div>
+            <div class="detail-card"><span>Data e hora</span><strong>${escapeHtml(formatarData(alerta.timestamp))}</strong></div>
+            <div class="detail-card"><span>Cliente</span><strong>${escapeHtml(alerta.clienteId || '—')}</strong></div>
+            <div class="detail-card"><span>Dispositivo</span><strong>${escapeHtml(alerta.dispositivo || '—')}</strong></div>
+            <div class="detail-card"><span>IP de origem</span><strong>${escapeHtml(alerta.ipOrigem || '—')}</strong></div>
         </div>
-    `;
+        <div class="modal-section">
+            <h4>LOCALIZAÇÃO</h4>
+            ${temLocalizacao ? `
+                <div id="mapaOcorrencia" class="mapa-ocorrencia" aria-label="Mapa da localização da ocorrência"></div>
+                <div class="mapa-detalhes">
+                    <span>Coordenadas: <strong>${Number(localizacao.latitude).toFixed(6)}, ${Number(localizacao.longitude).toFixed(6)}</strong></span>
+                    <span>Precisão: <strong>${formatarAcuracia(localizacao.acuracia)}</strong></span>
+                    <a href="https://www.google.com/maps/search/?api=1&query=${Number(localizacao.latitude)},${Number(localizacao.longitude)}" target="_blank" rel="noopener noreferrer" class="mapa-link">Abrir no Google Maps ↗</a>
+                </div>
+                ${precisaoBaixa(localizacao.acuracia)
+                    ? '<p class="mapa-alerta">⚠ Precisão baixa: o ponto no mapa pode estar deslocado. Se possível, confirme o endereço diretamente com o solicitante.</p>'
+                    : ''}
+                <p class="mapa-ajuda">Ponto registrado no momento do acionamento${Number.isFinite(Number(localizacao.acuracia)) ? '; o círculo mostra a margem de erro do GPS' : ''}.</p>
+            ` : '<p>Localização não enviada no acionamento.</p>'}
+        </div>
+        <div class="modal-section">
+            <h4>OBSERVAÇÕES</h4>
+            <p>${escapeHtml(alerta.observacoes || 'Nenhuma observação registrada.')}</p>
+        </div>
+        <div class="modal-actions">
+            ${alerta.status === 'ATIVO' ? `<button class="modal-btn btn-atender" onclick="atualizarStatus('${escapeHtml(alerta.id)}','EM_ATENDIMENTO')">Marcar em atendimento</button>` : ''}
+            ${alerta.status !== 'RESOLVIDO' ? `<button class="modal-btn btn-resolver" onclick="atualizarStatus('${escapeHtml(alerta.id)}','RESOLVIDO')">Encerrar ocorrência</button>` : ''}
+        </div>`;
 
-    modal.classList.remove('hidden');
+    $('modalAlerta').classList.remove('hidden');
+    $('modalAlerta').setAttribute('aria-hidden', 'false');
+
+    if (temLocalizacao) {
+        criarMapaOcorrencia(Number(localizacao.latitude), Number(localizacao.longitude), Number(localizacao.acuracia));
+    }
 }
 
-function atualizarStatus(id, novoStatus) {
+// Ícone customizado em formato de "alvo" para destacar o ponto do acionamento
+// entre as camadas de mapa padrão do Leaflet.
+const iconeOcorrencia = L.divIcon({
+    className: 'marcador-ocorrencia',
+    html: '<span class="marcador-pulso"></span><span class="marcador-nucleo"></span>',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+});
+
+function formatarAcuracia(acuraciaMetros) {
+    if (!Number.isFinite(Number(acuraciaMetros))) return 'não informada pelo dispositivo';
+    const metros = Number(acuraciaMetros);
+    if (metros < 1000) return `± ${Math.round(metros)} m`;
+    return `± ${(metros / 1000).toFixed(1)} km`;
+}
+
+// Acima disso, o ponto no mapa é só uma referência aproximada — não dá pra
+// confiar nele como o endereço exato (típico de geolocalização por Wi-Fi/torre
+// de celular em vez de GPS com sinal de satélite).
+const LIMITE_PRECISAO_BAIXA_M = 100;
+
+function precisaoBaixa(acuraciaMetros) {
+    return Number.isFinite(Number(acuraciaMetros)) && Number(acuraciaMetros) > LIMITE_PRECISAO_BAIXA_M;
+}
+
+function criarMapaOcorrencia(latitude, longitude, acuraciaMetros) {
+    if (mapaLocalizacao) {
+        mapaLocalizacao.remove();
+        mapaLocalizacao = null;
+    }
+
+    mapaLocalizacao = L.map('mapaOcorrencia', {
+        scrollWheelZoom: true,
+    }).setView([latitude, longitude], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(mapaLocalizacao);
+
+    L.marker([latitude, longitude], { icon: iconeOcorrencia })
+        .addTo(mapaLocalizacao)
+        .bindPopup(`Local do acionamento<br>Precisão: ${formatarAcuracia(acuraciaMetros)}`)
+        .openPopup();
+
+    // Quando o dispositivo informa a acurácia do GPS, desenhamos o raio de
+    // incerteza real e enquadramos o mapa nele, em vez de usar um zoom fixo
+    // que pode esconder o quão impreciso (ou preciso) o ponto realmente é.
+    const temAcuracia = Number.isFinite(acuraciaMetros) && acuraciaMetros > 0;
+    if (temAcuracia) {
+        const corPrecisao = precisaoBaixa(acuraciaMetros) ? '#ffa940' : '#ff4d4f';
+        const circulo = L.circle([latitude, longitude], {
+            radius: acuraciaMetros,
+            color: corPrecisao,
+            weight: 1,
+            fillColor: corPrecisao,
+            fillOpacity: 0.12,
+        }).addTo(mapaLocalizacao);
+
+        // maxZoom 19 = zoom máximo que o OpenStreetMap fornece: quando a
+        // precisão é ótima (poucos metros), deixamos o mapa aproximar até o
+        // limite real dos tiles, em vez de travar num zoom intermediário que
+        // faz parecer que o ponto está "impreciso" quando na verdade só
+        // estava sendo exibido de longe demais.
+        mapaLocalizacao.fitBounds(circulo.getBounds(), { maxZoom: 19, padding: [24, 24] });
+    }
+
+    // O Leaflet calcula o tamanho do mapa com base no container visível;
+    // como o modal acabou de ser exibido, forçamos um recálculo após a
+    // renderização para evitar tiles cortados ou cinza.
+    setTimeout(() => mapaLocalizacao.invalidateSize(), 0);
+}
+
+async function atualizarStatus(id, novoStatus) {
     const alerta = alertas.find(a => a.id === id);
     if (!alerta) return;
 
-    // Emitir atualização via socket
-    socket.emit('atualizar-alerta', {
-        id: id,
-        status: novoStatus,
-        usuario: 'Policial ' + Math.floor(Math.random() * 1000),
-        observacoes: alerta.observacoes
-    });
-
-    // Fechar modal se estiver aberto
-    document.getElementById('modalAlerta').classList.add('hidden');
+    try {
+        const resposta = await fetch(`/api/emergencia/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: novoStatus, observacoes: alerta.observacoes || null })
+        });
+        const resultado = await resposta.json();
+        if (!resposta.ok || !resultado.sucesso) throw new Error(resultado.mensagem || 'Falha ao atualizar ocorrência.');
+        fecharModal();
+    } catch (err) {
+        console.error('Erro ao atualizar status:', err);
+        window.alert(`Não foi possível atualizar o status: ${err.message}`);
+    }
 }
 
 function atualizarStatusConexao(conectado) {
-    const elemento = document.getElementById('statusConexao');
-    if (conectado) {
-        elemento.innerHTML = '<span class="status-dot online"></span><span class="status-label">Conectado</span>';
-    } else {
-        elemento.innerHTML = '<span class="status-dot offline"></span><span class="status-label">Desconectado</span>';
+    const el = $('statusConexao');
+    el.innerHTML = `<span class="status-dot ${conectado ? 'online' : 'offline'}"></span><span>${conectado ? 'ONLINE' : 'OFFLINE'}</span>`;
+}
+
+function fecharModal() {
+    if (mapaLocalizacao) {
+        mapaLocalizacao.remove();
+        mapaLocalizacao = null;
     }
+    $('modalAlerta').classList.add('hidden');
+    $('modalAlerta').setAttribute('aria-hidden', 'true');
 }
 
-function atualizarTotalAlertas() {
-    document.getElementById('totalAlertas').textContent = alertas.length;
-}
+socket.on('connect', () => { atualizarStatusConexao(true); marcarAtualizacao(); });
+socket.on('disconnect', () => { atualizarStatusConexao(false); });
 
-function tocarSomAlerta() {
-    // Criar som de alerta simulado
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
-}
-
-// ============================================
-// FUNÇÕES AUXILIARES
-// ============================================
-
-function getClassePorStatus(status) {
-    switch (status) {
-        case 'ATIVO':
-            return 'alerta-card ativo';
-        case 'EM_ATENDIMENTO':
-            return 'alerta-card em-atendimento';
-        case 'RESOLVIDO':
-            return 'alerta-card resolvido';
-        default:
-            return 'alerta-card';
+socket.on('carregar-alertas', dados => { alertas = Array.isArray(dados) ? dados : []; renderizarAlertas(); marcarAtualizacao(); });
+socket.on('novo-alerta', alerta => {
+    alertas = [alerta, ...alertas.filter(a => a.id !== alerta.id)];
+    renderizarAlertas();
+    marcarAtualizacao();
+    tocarSomAlerta();
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Novo acionamento de emergência', { body: `Protocolo ${alerta.protocolo}` });
     }
-}
+    const first = document.querySelector('.alerta-card');
+    if (first) first.style.animation = 'slideIn .45s ease';
+});
 
-function formatarStatus(status) {
-    switch (status) {
-        case 'ATIVO':
-            return '🔴 ATIVO';
-        case 'EM_ATENDIMENTO':
-            return '🟡 EM ATENDIMENTO';
-        case 'RESOLVIDO':
-            return '🟢 RESOLVIDO';
-        default:
-            return status;
-    }
-}
+socket.on('alerta-atualizado', alerta => {
+    const index = alertas.findIndex(a => a.id === alerta.id);
+    if (index !== -1) alertas[index] = alerta;
+    else alertas.unshift(alerta);
+    renderizarAlertas();
+    marcarAtualizacao();
+});
 
-function formatarData(dataString) {
-    const data = new Date(dataString);
-    return data.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
+socket.on('usuarios-conectados', quantidade => { $('usuariosConectados').textContent = quantidade; });
+socket.on('total-alertas', quantidade => { $('totalAlertas').textContent = quantidade; });
 
-// ============================================
-// EVENT LISTENERS
-// ============================================
-
-// Filtros
 document.querySelectorAll('.filtro-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', () => {
         document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        filtroAtual = e.target.dataset.filtro;
+        btn.classList.add('active');
+        filtroAtual = btn.dataset.filtro;
         renderizarAlertas();
     });
 });
 
-// Fechar modal
-document.querySelector('.modal-close').addEventListener('click', () => {
-    document.getElementById('modalAlerta').classList.add('hidden');
-});
+document.querySelector('.modal-close').addEventListener('click', fecharModal);
+$('modalAlerta').addEventListener('click', e => { if (e.target === $('modalAlerta')) fecharModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
 
-// Fechar modal ao clicar fora
-document.getElementById('modalAlerta').addEventListener('click', (e) => {
-    if (e.target.id === 'modalAlerta') {
-        document.getElementById('modalAlerta').classList.add('hidden');
-    }
-});
-
-// Solicitar permissão de notificação
-if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
+function tocarSomAlerta() {
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        const ctx = new AudioContextClass();
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.connect(gain); gain.connect(ctx.destination);
+        oscillator.type = 'sine'; oscillator.frequency.value = 740;
+        gain.gain.setValueAtTime(.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(.16, ctx.currentTime + .02);
+        gain.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + .38);
+        oscillator.start(); oscillator.stop(ctx.currentTime + .4);
+    } catch (error) { console.debug('Áudio indisponível:', error.message); }
 }
 
-// CSS para animação de slide in
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(-100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-`;
-document.head.appendChild(style);
+if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
 
-console.log('✅ Painel de emergência carregado');
+setInterval(atualizarRelogio, 1000);
+atualizarRelogio();
+renderizarAlertas();
+
+console.log('Central Operacional carregada.');
