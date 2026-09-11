@@ -3,9 +3,9 @@ const status = document.getElementById('status');
 
 let envioEmCurso = false;
 
-function mostrarStatus(mensagem, cor = 'white') {
+function mostrarStatus(mensagem, tipo = '') {
   status.innerText = mensagem;
-  status.style.color = cor;
+  status.parentElement.dataset.tipo = tipo;
 }
 
 function obterClienteId() {
@@ -21,90 +21,58 @@ function obterClienteId() {
   return id;
 }
 
-btn.addEventListener('click', async () => {
-  if (envioEmCurso) {
-    mostrarStatus('Alerta já está sendo enviado...', '#ffcc00');
-    return;
-  }
-
-  if (!btn.hasAttribute('data-confirmado')) {
-    btn.setAttribute('data-confirmado', 'true');
-    mostrarStatus('⚠️ Clique novamente para confirmar a emergência', '#ffcc00');
-
-    setTimeout(() => {
-      btn.removeAttribute('data-confirmado');
-      mostrarStatus('');
-    }, 3000);
-    return;
-  }
-
+async function enviarEmergencia() {
   envioEmCurso = true;
-  btn.removeAttribute('data-confirmado');
   btn.disabled = true;
   btn.classList.add('enviando');
-  mostrarStatus('📍 Obtendo localização...', '#ffcc00');
-
-  const dados = {
-    clienteId: obterClienteId(),
-    tipo: 'EMERGENCIA',
-    prioridade: 'ALTA',
-    dispositivo: navigator.userAgent,
-    localizacao: await obterLocalizacao(),
-  };
-
-  // Uma acurácia muito ruim (dezenas de km) normalmente indica que o
-  // dispositivo não está usando GPS de verdade, e sim uma estimativa por
-  // IP/rede — típico de "Localização Precisa" desativada no celular, ou
-  // de testes em notebook sem chip de GPS. O alerta é enviado do mesmo
-  // jeito (é uma emergência, não podemos bloquear por isso), mas avisamos
-  // brevemente antes de seguir para o envio.
-  const LIMITE_ACURACIA_RUIM_M = 5000;
-  const acuracia = dados.localizacao?.acuracia;
-  if (Number.isFinite(acuracia) && acuracia > LIMITE_ACURACIA_RUIM_M) {
-    mostrarStatus('⚠️ Localização imprecisa (verifique "Localização Precisa" no celular)...', '#ffcc00');
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-  }
-
-  mostrarStatus('📤 Enviando alerta de emergência...', '#ffcc00');
+  btn.querySelector('.texto-botao').textContent = 'ENVIANDO ALERTA';
+  mostrarStatus('Obtendo localização...', 'alerta');
 
   try {
+    const dados = {
+      clienteId: obterClienteId(),
+      tipo: 'EMERGENCIA',
+      prioridade: 'ALTA',
+      dispositivo: navigator.userAgent,
+      localizacao: await obterLocalizacao(),
+    };
+    const acuracia = dados.localizacao?.acuracia;
+    if (Number.isFinite(acuracia) && acuracia > 5000) {
+      mostrarStatus('Localização imprecisa. Enviando mesmo assim...', 'alerta');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    mostrarStatus('Enviando alerta para a central...', 'alerta');
     const resposta = await fetch('/api/emergencia', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
     });
-
-    let resultado;
-    try {
-      resultado = await resposta.json();
-    } catch {
+    const resultado = await resposta.json().catch(() => {
       throw new Error(`Resposta inesperada do servidor (HTTP ${resposta.status}).`);
-    }
+    });
+    if (!resposta.ok || !resultado.sucesso) throw new Error(resultado.mensagem || `Erro do servidor: ${resposta.status}`);
 
-    if (!resposta.ok || !resultado.sucesso) {
-      throw new Error(resultado.mensagem || `Erro do servidor: ${resposta.status}`);
-    }
-
-    mostrarStatus(`✅ Emergência registrada. Protocolo: ${resultado.protocolo}`, '#00ff00');
-    console.log('Alerta enviado:', resultado);
-
-    localStorage.removeItem('emergencia_cliente_id');
+    const mensagemSucesso = resultado.duplicado
+      ? `Alerta já registrado. ${resultado.quantidadeAcionamentos} acionamentos contabilizados.`
+      : `Emergência registrada. Protocolo: ${resultado.protocolo}`;
+    mostrarStatus(mensagemSucesso, 'sucesso');
   } catch (erro) {
-    // Mostra o motivo real do erro (ex.: "Serviço de emergência não configurado.",
-    // "Não foi possível comunicar com o sistema da polícia.") em vez de uma mensagem
-    // genérica, para que dê pra saber se o problema é rede, configuração ou o
-    // backend da polícia estar fora do ar.
-    const mensagemFalhaRede = 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
-    const mensagem = erro instanceof TypeError ? mensagemFalhaRede : erro.message;
-    mostrarStatus(`❌ ${mensagem || 'Não foi possível enviar o alerta. Tente novamente.'}`, '#ff0000');
+    const mensagem = erro instanceof TypeError
+      ? 'Sem conexão com o servidor. Verifique sua internet e tente novamente.'
+      : erro.message;
+    mostrarStatus(mensagem || 'Não foi possível enviar o alerta. Tente novamente.', 'erro');
     console.error('Erro ao enviar alerta:', erro);
   } finally {
     envioEmCurso = false;
     btn.disabled = false;
     btn.classList.remove('enviando');
-
-    setTimeout(() => mostrarStatus(''), 7000);
+    btn.querySelector('.texto-botao').textContent = 'TOQUE PARA ALERTAR';
   }
+}
+
+btn.addEventListener('click', () => {
+  if (!envioEmCurso) enviarEmergencia();
 });
 
 async function obterLocalizacao() {

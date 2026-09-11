@@ -130,6 +130,7 @@ button { font: inherit; }
 .alerta-protocolo { display:block; font:600 12px "JetBrains Mono",monospace; color:#b8d3ef; overflow:hidden; text-overflow:ellipsis; }
 .alerta-main-title { font-size:13px; font-weight:600; margin-top:6px; color:var(--text); }
 .alerta-sub { margin-top:4px; font-size:10px; color:var(--muted); }
+.alerta-contagem { display:inline-block; margin-top:8px; padding:4px 7px; border:1px solid rgba(255,191,77,.22); border-radius:5px; color:#ffd388; background:rgba(255,191,77,.08); font:600 9px "JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:.04em; }
 .alerta-status { display:inline-flex; align-items:center; gap:6px; width:max-content; padding:5px 8px; border-radius:6px; font:600 9px "JetBrains Mono",monospace; letter-spacing:.04em; }
 .alerta-status.ativo { color:#ff9da2; background:rgba(255,90,97,.09); border:1px solid rgba(255,90,97,.16); }
 .alerta-status.em-atendimento { color:#ffd388; background:rgba(255,191,77,.09); border:1px solid rgba(255,191,77,.16); }

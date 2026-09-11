@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS alertas_policia (
     CHECK (status IN ('ATIVO', 'EM_ATENDIMENTO', 'RESOLVIDO', 'FALSO_ALARME')),
   prioridade TEXT NOT NULL DEFAULT 'ALTA'
     CHECK (prioridade IN ('BAIXA', 'MEDIA', 'ALTA', 'CRITICA')),
+  quantidade_acionamentos INTEGER NOT NULL DEFAULT 1,
   latitude REAL,
   longitude REAL,
   acuracia_metros REAL,

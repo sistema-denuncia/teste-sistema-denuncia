@@ -52,6 +52,7 @@ async function inicializarBanco() {
         CHECK (status IN ('ATIVO', 'EM_ATENDIMENTO', 'RESOLVIDO', 'FALSO_ALARME')),
       prioridade TEXT NOT NULL DEFAULT 'ALTA'
         CHECK (prioridade IN ('BAIXA', 'MEDIA', 'ALTA', 'CRITICA')),
+      quantidade_acionamentos INTEGER NOT NULL DEFAULT 1,
       latitude REAL,
       longitude REAL,
       acuracia_metros REAL,
@@ -64,6 +65,12 @@ async function inicializarBanco() {
       encerrado_em TEXT
     )
   `);
+
+  const colunas = await all('PRAGMA table_info(alertas_policia)');
+  if (!colunas.some((coluna) => coluna.name === 'quantidade_acionamentos')) {
+    await run(`ALTER TABLE alertas_policia
+               ADD COLUMN quantidade_acionamentos INTEGER NOT NULL DEFAULT 1`);
+  }
 
   await run(`CREATE INDEX IF NOT EXISTS idx_alertas_status_criado
              ON alertas_policia (status, criado_em DESC)`);
