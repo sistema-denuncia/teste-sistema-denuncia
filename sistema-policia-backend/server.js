@@ -73,6 +73,7 @@ io.on('connection', async (socket) => {
       tipo: row.tipo,
       status: row.status,
       prioridade: row.prioridade,
+      quantidadeAcionamentos: row.quantidade_acionamentos || 1,
       localizacao: row.latitude === null && row.longitude === null ? null : {
         latitude: row.latitude,
         longitude: row.longitude,
