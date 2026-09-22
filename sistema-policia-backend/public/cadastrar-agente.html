@@ -180,7 +180,9 @@
     }
 
     .tabela-wrapper {
+      max-height: 360px;
       overflow-x: auto;
+      overflow-y: auto;
       border: 1px solid var(--line);
       border-radius: 9px;
     }
@@ -315,6 +317,10 @@
   </div>
 
   <script>
+    if (sessionStorage.getItem('supervisorAutenticado') !== 'true') {
+      window.location.replace('adm-sistema.html');
+    }
+
     const formCadastroAgente = document.getElementById('formCadastroAgente');
     const mensagemSucesso = document.getElementById('mensagemSucesso');
     const listaAgentes = document.getElementById('listaAgentes');

@@ -18,11 +18,23 @@ const io = socketIo(server, {
 
 const PORT = Number(process.env.PORT || 3001);
 const API_KEY = process.env.POLICIA_API_KEY || 'desenvolvimento-local';
+const SUPERVISOR_LOGIN = process.env.SUPERVISOR_LOGIN || 'supervisor';
+const SUPERVISOR_SENHA = process.env.SUPERVISOR_SENHA || 'Supervisor@123';
 
 app.set('io', io);
 app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : false);
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.post('/api/auth/supervisor', (req, res) => {
+  const { login, senha } = req.body || {};
+
+  if (login !== SUPERVISOR_LOGIN || senha !== SUPERVISOR_SENHA) {
+    return res.status(401).json({ sucesso: false, mensagem: 'Login ou senha inválidos.' });
+  }
+
+  res.json({ sucesso: true });
+});
 
 app.use('/api/emergencia', (req, res, next) => {
   if (req.method !== 'POST') return next();
@@ -73,6 +85,7 @@ io.on('connection', async (socket) => {
       tipo: row.tipo,
       status: row.status,
       prioridade: row.prioridade,
+      quantidadeAcionamentos: row.quantidade_acionamentos || 1,
       localizacao: row.latitude === null && row.longitude === null ? null : {
         latitude: row.latitude,
         longitude: row.longitude,

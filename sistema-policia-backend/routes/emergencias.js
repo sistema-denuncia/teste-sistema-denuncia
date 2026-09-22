@@ -49,6 +49,7 @@ function formatarAlerta(row) {
     tipo: row.tipo,
     status: row.status,
     prioridade: row.prioridade,
+    quantidadeAcionamentos: row.quantidade_acionamentos || 1,
     localizacao: row.latitude === null && row.longitude === null
       ? null
       : {
@@ -87,10 +88,28 @@ router.post('/', emergenciaLimiter, async (req, res) => {
     );
 
     if (existente) {
+      await run(
+        `UPDATE alertas_policia
+         SET quantidade_acionamentos = COALESCE(quantidade_acionamentos, 1) + 1,
+             atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [existente.id]
+      );
+
+      const alertaAtualizado = formatarAlerta(await get(
+        'SELECT * FROM alertas_policia WHERE id = ?',
+        [existente.id]
+      ));
+
+      req.app.get('io').emit('alerta-atualizado', alertaAtualizado);
+
       return res.status(200).json({
         sucesso: true,
-        mensagem: 'Este acionamento já foi registrado.',
-        alerta: formatarAlerta(existente),
+        mensagem: 'Este acionamento já foi registrado. A nova tentativa foi contabilizada.',
+        id: alertaAtualizado.id,
+        protocolo: alertaAtualizado.protocolo,
+        quantidadeAcionamentos: alertaAtualizado.quantidadeAcionamentos,
+        alerta: alertaAtualizado,
         duplicado: true,
       });
     }

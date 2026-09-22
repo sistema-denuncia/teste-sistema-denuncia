@@ -101,6 +101,7 @@ function renderizarAlertas() {
                     <span class="alerta-protocolo">${escapeHtml(alerta.protocolo)}</span>
                     <div class="alerta-main-title">${escapeHtml(alerta.tipo || 'EMERGÊNCIA')}</div>
                     <div class="alerta-sub">Recebido em ${escapeHtml(formatarData(alerta.timestamp))}</div>
+                    <span class="alerta-contagem">${escapeHtml(alerta.quantidadeAcionamentos || 1)} acionamento${(alerta.quantidadeAcionamentos || 1) === 1 ? '' : 's'}</span>
                 </div>
 
                 <div class="alerta-info">
@@ -139,6 +140,7 @@ function abrirDetalhes(id) {
         <div class="detail-grid">
             <div class="detail-card"><span>Status</span><strong>${escapeHtml(formatarStatus(alerta.status))}</strong></div>
             <div class="detail-card"><span>Prioridade</span><strong>${escapeHtml(alerta.prioridade || '—')}</strong></div>
+            <div class="detail-card"><span>Acionamentos</span><strong>${escapeHtml(alerta.quantidadeAcionamentos || 1)}</strong></div>
             <div class="detail-card"><span>Data e hora</span><strong>${escapeHtml(formatarData(alerta.timestamp))}</strong></div>
             <div class="detail-card"><span>Cliente</span><strong>${escapeHtml(alerta.clienteId || '—')}</strong></div>
             <div class="detail-card"><span>Dispositivo</span><strong>${escapeHtml(alerta.dispositivo || '—')}</strong></div>
